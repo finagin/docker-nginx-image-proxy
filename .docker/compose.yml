@@ -1,0 +1,41 @@
+version: '3.8'
+
+networks:
+  backend:
+    driver: ${NETWORKS_DRIVER}
+
+services:
+
+  nginx:
+    image: nginx:mainline-alpine
+    restart: always
+    env_file:
+      - ../.env
+    ports:
+      - ${NGINX_PORT}:80
+      - ${NGINX_PORT_SSL}:443
+    volumes:
+      - ${SOURCES_DIR}:${TARGET_DIR}
+      - ${VOLUMES_DIR}/nginx/tmp:/tmp
+      - ${SERVICES_DIR}/nginx/nginx.nginx:/etc/nginx/nginx.conf
+      - ${SERVICES_DIR}/nginx/modules-enabled:/etc/nginx/modules-enabled
+      - ${SERVICES_DIR}/nginx/ssl:/etc/nginx/ssl
+      - ${SERVICES_DIR}/nginx/templates:/etc/nginx/templates
+    environment:
+      - NGINX_ROOT=${TARGET_DIR}
+      - NGINX_HOST=${NGINX_HOST}
+      - NGINX_PORT=80
+    networks:
+      - backend
+
+  php:
+    image: php:7.4-fpm
+    restart: always
+    env_file:
+      - ../.env
+    expose:
+      - 9000
+    volumes:
+      - ${SOURCES_DIR}:${TARGET_DIR}
+    networks:
+      - backend

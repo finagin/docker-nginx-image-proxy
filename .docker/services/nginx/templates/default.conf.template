@@ -1,0 +1,65 @@
+server {
+	server_name  ${NGINX_HOST};
+
+	listen       ${NGINX_PORT};
+
+#	listen       ${NGINX_PORT_SSL} ssl;
+#	ssl_certificate     /etc/nginx/ssl/fullchain.pem;
+#	ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+#	if ($scheme != "https") {
+#		return  302 https://$host$request_uri;
+#	}
+
+	root         ${NGINX_ROOT}/public;
+
+	add_header X-Frame-Options "SAMEORIGIN";
+	add_header X-XSS-Protection "1; mode=block";
+	add_header X-Content-Type-Options "nosniff";
+
+	index index.html index.htm index.php;
+
+	charset utf-8;
+
+	location ~ ^/resize/local/(?<path>.*)$ {
+		proxy_pass http://resize/local/$path;
+		proxy_cache images;
+		proxy_cache_valid 200 24h;
+		proxy_cache_valid any 1m;
+	}
+
+	location ~ ^/resize/custom/(?<path>.*)$ {
+		proxy_pass http://resize/custom/$path;
+		proxy_cache images;
+		proxy_cache_valid 200 24h;
+		proxy_cache_valid any 1m;
+	}
+
+	location ~ ^/resize/pinterest/(?<path>.*)$ {
+		proxy_pass http://resize/pinterest/$path;
+		proxy_cache images;
+		proxy_cache_valid 200 24h;
+		proxy_cache_valid any 1m;
+	}
+
+	location / {
+		try_files $uri /index.php?$args;
+	}
+
+	location = /favicon.ico { access_log off; log_not_found off; }
+	location = /robots.txt  { access_log off; log_not_found off; }
+
+	error_page 404 /index.php;
+
+	location ~ \.php$ {
+		fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass php:9000;
+		fastcgi_index index.php;
+		include fastcgi_params;
+		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+		fastcgi_param PATH_INFO $fastcgi_path_info;
+	}
+
+	location ~ /\.(?!well-known).* {
+		deny all;
+	}
+}

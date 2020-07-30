@@ -1,0 +1,89 @@
+upstream resize {
+	server 127.0.0.1:8888;
+}
+
+proxy_cache_path /tmp/nginx-images-cache/ levels=1:2 keys_zone=images:10m inactive=24h max_size=100m;
+
+server {
+	listen 8888;
+	server_name localhost;
+
+	resolver                        8.8.8.8 8.8.4.4;
+	image_filter_buffer             20M;
+	image_filter_interlace          on;
+	proxy_set_header                X-Real-IP       $remote_addr;
+	proxy_set_header                X-Forwarded-For $proxy_add_x_forwarded_for;
+	proxy_set_header                User-Agent      "$http_user_agent";
+	proxy_connect_timeout           30s;
+	proxy_send_timeout              30s;
+	proxy_read_timeout              30s;
+	proxy_temp_path                 /var/cache/nginx/temp;
+	proxy_pass_request_headers      off;
+	proxy_ignore_headers            Vary Expires Set-Cookie Cache-Control;
+	proxy_pass_header               P3P;
+	proxy_cache_min_uses            2;
+	proxy_ssl_server_name           on;
+	proxy_intercept_errors          on;
+	proxy_cache_use_stale           updating error timeout http_500 http_502 http_503 http_504;
+	proxy_cache_background_update   on;
+	proxy_cache_valid               any 10m;
+	proxy_cache_valid               301 302 307 0s;
+	proxy_cache_key                 $request_uri;
+	proxy_method                    GET;
+
+	location ~ ^/local/(.*)$ {
+		alias ${NGINX_ROOT}/public/storage/$1;
+
+		add_header                  X-ImageProxy-Cache $upstream_cache_status;
+		expires                     24h;
+		add_header                  Cache-Control "public";
+		image_filter_jpeg_quality   90;
+		image_filter                resize 600 -;
+	}
+
+	location ~ ^/custom/(?<width>[^/]+)/(?<path>.*)$ {
+		set $proxied_address "https://i.pinimg.com/originals/$path";
+
+		rewrite ^ /cmd/resize last;
+	}
+
+	location ~ ^/pinterest/(?<path>.*)$ {
+		set $proxied_address "https://i.pinimg.com/originals/$path";
+		set $width 600;
+
+		rewrite ^ /cmd/resize last;
+	}
+
+	location /cmd/resize {
+		internal;
+
+		proxy_pass                  $proxied_address;
+		proxy_hide_header           "X-Cache";
+		proxy_hide_header           "Content-Type";
+		proxy_hide_header           "Last-Modified";
+		proxy_hide_header           "ETag";
+		proxy_hide_header           "Content-Disposition";
+		proxy_hide_header           "X-Amz-Id";
+		proxy_hide_header           "X-Amz-Id-2";
+		proxy_hide_header           "x-amz-meta-s3fox-filesize";
+		proxy_hide_header           "x-amz-meta-s3fox-modifiedtime";
+		proxy_hide_header           "X-Amz-Request-Id";
+		proxy_hide_header           "X-Amz-Replication-Status";
+		proxy_hide_header           "X-Amz-Expiration";
+		proxy_hide_header           "X-Amz-Version-Id";
+		proxy_hide_header           "X-Amz-Cf-Id";
+		proxy_hide_header           "Via";
+		proxy_hide_header           "Access-Control-Allow-Origin";
+		proxy_hide_header           "x-amz-meta-s3b-last-modified";
+		proxy_hide_header           "Set-Cookie";
+		proxy_hide_header           "CF-Cache-Status";
+		proxy_hide_header           "cf-ray";
+
+		add_header                  X-ImageProxy-Cache $upstream_cache_status;
+		expires                     24h;
+		add_header                  Cache-Control "public";
+
+		image_filter_jpeg_quality   90;
+		image_filter                resize $width -;
+	}
+}
